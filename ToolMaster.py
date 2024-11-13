@@ -1,13 +1,22 @@
 import sys
+import json
+import os
 import msoffcrypto
 import io
-import json
 from datetime import datetime
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem,
-                             QTabWidget, QAbstractItemView, QPushButton, QLabel, QMessageBox, QStackedWidget)
+                             QTabWidget, QAbstractItemView, QPushButton, QLabel, QMessageBox, QFileDialog, QStackedWidget)
 from PyQt5.QtCore import Qt
 from openpyxl import load_workbook
 
+# Function to load config.json
+def load_config(config_path="config.json"):
+    if os.path.exists(config_path):
+        with open(config_path, "r") as config_file:
+            return json.load(config_file)
+    else:
+        QMessageBox.warning(None, "Error", "Config file not found!")
+        return {}
 
 # Dummy data to store credentials
 USERS = {
@@ -16,23 +25,13 @@ USERS = {
     "OP": {"password": "OP", "role": "operator"}
 }
 
-# Global variable to store file paths and passwords
-config_data = {
-    "file_path_process": None,
-    "file_path_operator": None,
-    "workbook_password": None,
-    "sheet_password": None,
-    "history_path": None
-}
-
-
 class LoginPage(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
         self.setWindowTitle("Login")
         layout = QVBoxLayout()
-
+        
         # Username input
         self.username_label = QLabel("Username:")
         self.username_input = QLineEdit()
@@ -64,199 +63,191 @@ class LoginPage(QWidget):
         else:
             QMessageBox.warning(self, "Login Failed", "Invalid username or password")
 
-
-class AdminConfigurationPage(QWidget):
-    def __init__(self, layout):
-        super().__init__()
-        self.setWindowTitle("Admin Configuration")
-        self.layout = layout
-        self.setup_widgets()
-
-    def setup_widgets(self):
-        # Create widgets for file path and passwords input
-        self.file_path_process_label = QLabel("Set Process Excel File Path:")
-        self.file_path_process_input = QLineEdit()
-        self.file_path_operator_label = QLabel("Set Operator Excel File Path:")
-        self.file_path_operator_input = QLineEdit()
-        self.workbook_password_label = QLabel("Set Workbook Password:")
-        self.workbook_password_input = QLineEdit()
-        self.workbook_password_input.setEchoMode(QLineEdit.Password)
-        self.sheet_password_label = QLabel("Set Sheet Password:")
-        self.sheet_password_input = QLineEdit()
-        self.sheet_password_input.setEchoMode(QLineEdit.Password)
-        self.history_path_label = QLabel("Set Process Log History Path:")
-        self.history_path_input = QLineEdit()
-
-        # Save button to store all configurations
-        self.save_button = QPushButton("Save Configuration")
-        self.save_button.clicked.connect(self.save_configuration)
-
-        # Add widgets to the layout
-        self.layout.addWidget(self.file_path_process_label)
-        self.layout.addWidget(self.file_path_process_input)
-        self.layout.addWidget(self.file_path_operator_label)
-        self.layout.addWidget(self.file_path_operator_input)
-        self.layout.addWidget(self.workbook_password_label)
-        self.layout.addWidget(self.workbook_password_input)
-        self.layout.addWidget(self.sheet_password_label)
-        self.layout.addWidget(self.sheet_password_input)
-        self.layout.addWidget(self.history_path_label)
-        self.layout.addWidget(self.history_path_input)
-        self.layout.addWidget(self.save_button)
-
-    def save_configuration(self):
-        global config_data
-
-        # Get values from the input fields
-        file_path_process = self.file_path_process_input.text()
-        file_path_operator = self.file_path_operator_input.text()
-        workbook_password = self.workbook_password_input.text()
-        sheet_password = self.sheet_password_input.text()
-        history_path = self.history_path_input.text()
-
-        # Store the values in the global configuration data
-        config_data["file_path_process"] = file_path_process
-        config_data["file_path_operator"] = file_path_operator
-        config_data["workbook_password"] = workbook_password
-        config_data["sheet_password"] = sheet_password
-        config_data["history_path"] = history_path
-
-        # Save configuration data to a JSON file
-        try:
-            with open("config_data.json", "w") as f:
-                json.dump(config_data, f)
-            QMessageBox.information(self, "Success", "Configuration has been successfully saved.")
-        except IOError as e:
-            QMessageBox.warning(self, "Error", f"Failed to save configuration: {str(e)}")
-
-
 class ExcelViewerWithHomePage(QWidget):
-    def __init__(self, file_path=None, role="operator"):
+    def __init__(self, role="operator"):
         super().__init__()
         self.user_role = role
-        self.setWindowTitle("Excel Viewer with Home and Search Navigation")
+        self.setWindowTitle("Excel Viewer")
         self.setGeometry(100, 100, 800, 600)
-        self.history_path = config_data["history_path"]  # Path to store history for Process role
 
-        # Initialize layout before adding any widgets
-        layout = QVBoxLayout()  # Initialize the layout
-        self.setLayout(layout)  # Set this layout to the widget
+        self.config_path = "config.json"  # Default config path
+        self.history_path = "history_log.json"
+        self.config_data = load_config(self.config_path)
 
-        # Widgets for admin file path and sheet name setup
-        if self.user_role == "admin":
-            self.setup_admin_widgets(layout)
+        self.file_path = self.config_data.get(f"{self.user_role}_file_path", "")
+        self.workbook_password = self.config_data.get("workbook_password", "")
+        self.sheet_passwords = self.config_data.get("sheet_passwords", {})
 
-        # If a file path is provided and exists, attempt to load the workbook
-        if file_path:
-            self.file_path = file_path
+        if self.file_path:
             self.load_workbook()
 
-        # Setup for Process role to log actions
-        if self.user_role == "process":
-            self.log_action("Process login initiated")
-
-        # Set up search and home page for all roles
-        self.setup_search_and_home(layout)
-
-    def setup_admin_widgets(self, layout):
-        # File path setup input and button for Admin
-        self.file_path_label = QLabel("Set Excel File Path:")
-        self.file_path_input = QLineEdit()
-        self.file_path_button = QPushButton("Set File Path")
-
-        # Connect the button to the method to set file path
-        self.file_path_button.clicked.connect(self.set_file_path)
-
-        # Add widgets to layout
-        layout.addWidget(self.file_path_label)
-        layout.addWidget(self.file_path_input)
-        layout.addWidget(self.file_path_button)
-
-    def set_file_path(self):
-        global config_data  # Use global variable to store the file path
-        self.file_path = self.file_path_input.text()
-        config_data["file_path_process"] = self.file_path  # Set global file path
-        if self.file_path:
-            QMessageBox.information(self, "File Path Set", "File path has been successfully set.")
-        else:
-            QMessageBox.warning(self, "Error", "Please provide a valid file path")
+        self.setup_widgets()
 
     def load_workbook(self):
         # Decrypt and load the password-protected Excel file for viewing
-        try:
-            decrypted_file = io.BytesIO()
-            with open(self.file_path, "rb") as f:
-                encrypted = msoffcrypto.OfficeFile(f)
-                encrypted.load_key(password=config_data["workbook_password"])  # Use actual password or prompt admin to enter
-                encrypted.decrypt(decrypted_file)
+        decrypted_file = io.BytesIO()
+        with open(self.file_path, "rb") as f:
+            encrypted = msoffcrypto.OfficeFile(f)
+            encrypted.load_key(password=self.workbook_password)  # Use the password from config
+            encrypted.decrypt(decrypted_file)
 
-            # Load workbook from decrypted file content
-            decrypted_file.seek(0)
-            self.workbook = load_workbook(decrypted_file, data_only=True, keep_vba=True)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load workbook: {str(e)}")
+        decrypted_file.seek(0)
+        self.workbook = load_workbook(decrypted_file, data_only=True, keep_vba=True)
 
-    def setup_search_and_home(self, layout):
-        # Set up search bar and tab widget
-        self.search_bar = QLineEdit()
-        self.search_bar.setPlaceholderText("Search...")
-        self.search_bar.textChanged.connect(self.search)
-
+    def setup_widgets(self):
+        # Set up the UI (search bar, tabs, etc.)
         self.tab_widget = QTabWidget()
+
+        # Home tab
         self.home_table = QTableWidget()
         self.home_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.home_table.cellClicked.connect(self.navigate_to_sheet)
         self.tab_widget.addTab(self.home_table, "Home")
 
-        layout.addWidget(self.search_bar)
+        # Load config.json content into the home page if the role is admin
+        if self.user_role == "admin":
+            self.load_config_data_to_home()
+
+            # Admin-specific settings (like file path configuration)
+            self.setup_admin_widgets()
+
+        layout = QVBoxLayout()
         layout.addWidget(self.tab_widget)
+        self.setLayout(layout)
 
-    def search(self, text):
-        # Implement search logic here for all roles
-        pass
+    def load_config_data_to_home(self):
+        # Load config data into home tab as a table
+        self.home_table.clear()
+        self.home_table.setColumnCount(2)
+        self.home_table.setRowCount(len(self.config_data))
+        self.home_table.setHorizontalHeaderLabels(["Key", "Value"])
 
-    def navigate_to_sheet(self, row, column):
-        # This method will be called when a cell in home_table is clicked.
-        sheet_name = self.home_table.item(row, 0).text()  # Assuming first column has sheet names
-        QMessageBox.information(self, "Sheet Navigation", f"Navigating to {sheet_name} (row: {row}, column: {column})")
-        # Add logic here to switch to the corresponding sheet in the workbook or display its content
+        for row, (key, value) in enumerate(self.config_data.items()):
+            self.home_table.setItem(row, 0, QTableWidgetItem(key))
+            self.home_table.setItem(row, 1, QTableWidgetItem(str(value)))
 
-    def log_action(self, action):
-        if self.user_role == "process":
-            log_message = f"{datetime.now()}: {action}"
-            try:
-                with open(self.history_path, "a") as f:
-                    f.write(log_message + "\n")
-            except Exception as e:
-                QMessageBox.warning(self, "Log Error", f"Failed to log action: {str(e)}")
+    def setup_admin_widgets(self):
+        # Admin can set file paths and passwords
+        settings_tab = QWidget()
+        settings_layout = QVBoxLayout()
 
+        # Config File Path Display
+        self.config_path_label = QLabel("Config File Path:")
+        self.config_path_display = QLabel(self.config_path)
+        self.config_browse_button = QPushButton("Change Config File Path")
+        self.config_browse_button.clicked.connect(self.change_config_path)
 
-class MainWindow(QWidget):
+        # Process File Path
+        self.process_file_path_label = QLabel("Process File Path:")
+        self.process_file_path_input = QLineEdit(self.config_data.get("process_file_path", ""))
+        self.process_file_path_button = QPushButton("Browse Process File Path")
+        self.process_file_path_button.clicked.connect(self.browse_process_file_path)
+
+        # OP File Path
+        self.op_file_path_label = QLabel("OP File Path:")
+        self.op_file_path_input = QLineEdit(self.config_data.get("op_file_path", ""))
+        self.op_file_path_button = QPushButton("Browse OP File Path")
+        self.op_file_path_button.clicked.connect(self.browse_op_file_path)
+
+        # Workbook Password
+        self.workbook_password_label = QLabel("Workbook Password:")
+        self.workbook_password_input = QLineEdit(self.workbook_password)
+
+        # Save Button
+        self.save_config_button = QPushButton("Save Settings")
+        self.save_config_button.clicked.connect(self.save_config)
+
+        # Add widgets to layout
+        settings_layout.addWidget(self.config_path_label)
+        settings_layout.addWidget(self.config_path_display)
+        settings_layout.addWidget(self.config_browse_button)
+
+        settings_layout.addWidget(self.process_file_path_label)
+        settings_layout.addWidget(self.process_file_path_input)
+        settings_layout.addWidget(self.process_file_path_button)
+
+        settings_layout.addWidget(self.op_file_path_label)
+        settings_layout.addWidget(self.op_file_path_input)
+        settings_layout.addWidget(self.op_file_path_button)
+
+        settings_layout.addWidget(self.workbook_password_label)
+        settings_layout.addWidget(self.workbook_password_input)
+        settings_layout.addWidget(self.save_config_button)
+
+        settings_tab.setLayout(settings_layout)
+        self.tab_widget.addTab(settings_tab, "Settings")
+
+    def change_config_path(self):
+        # Allow the admin to change the config.json path
+        new_path, _ = QFileDialog.getOpenFileName(self, "Select Config File", "", "JSON Files (*.json)")
+        if new_path:
+            self.config_path = new_path
+            self.config_path_display.setText(self.config_path)
+            self.config_data = load_config(self.config_path)  # Reload config with new path
+            self.load_config_data_to_home()  # Update the home table with new config data
+            self.update_fields()
+
+    def update_fields(self):
+        # Update fields with loaded config values
+        self.process_file_path_input.setText(self.config_data.get("process_file_path", ""))
+        self.op_file_path_input.setText(self.config_data.get("op_file_path", ""))
+        self.workbook_password_input.setText(self.config_data.get("workbook_password", ""))
+
+    def browse_process_file_path(self):
+        # Select file path for Process file
+        new_path, _ = QFileDialog.getOpenFileName(self, "Select Excel File", "", "Excel Files (*.xlsx;*.xlsm)")
+        if new_path:
+            self.process_file_path_input.setText(new_path)
+
+    def browse_op_file_path(self):
+        # Select file path for OP file
+        new_path, _ = QFileDialog.getOpenFileName(self, "Select Excel File", "", "Excel Files (*.xlsx;*.xlsm)")
+        if new_path:
+            self.op_file_path_input.setText(new_path)
+
+    def save_config(self):
+        # Save updated config data to config.json
+        self.config_data["process_file_path"] = self.process_file_path_input.text()
+        self.config_data["op_file_path"] = self.op_file_path_input.text()
+        self.config_data["workbook_password"] = self.workbook_password_input.text()
+
+        with open(self.config_path, "w") as config_file:
+            json.dump(self.config_data, config_file, indent=4)
+
+        QMessageBox.information(self, "Settings Saved", "Configuration has been saved successfully.")
+
+class MainApplication(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ToolMaster")
-        self.setGeometry(100, 100, 800, 600)
-        self.layout = QVBoxLayout()
+        self.setWindowTitle("Main Application")
         self.user_role = None
+
+        layout = QVBoxLayout()
+
+        # Create stacked widget for login and role-based views
+        self.stacked_widget = QStackedWidget()
         self.login_page = LoginPage(self)
-        self.layout.addWidget(self.login_page)
-        self.setLayout(self.layout)
+        self.stacked_widget.addWidget(self.login_page)
+
+        layout.addWidget(self.stacked_widget)
+        self.setLayout(layout)
 
     def show_role_specific_page(self):
-        # Show the page based on the user role
+        # Show specific view for each role after login
         if self.user_role == "admin":
             admin_view = ExcelViewerWithHomePage(role="admin")
-            self.layout.addWidget(admin_view)
-        else:
-            operator_view = ExcelViewerWithHomePage(role=self.user_role)
-            self.layout.addWidget(operator_view)
+            self.stacked_widget.addWidget(admin_view)
+            self.stacked_widget.setCurrentWidget(admin_view)
+        elif self.user_role == "process":
+            process_view = ExcelViewerWithHomePage(role="process")
+            self.stacked_widget.addWidget(process_view)
+            self.stacked_widget.setCurrentWidget(process_view)
+        elif self.user_role == "operator":
+            operator_view = ExcelViewerWithHomePage(role="operator")
+            self.stacked_widget.addWidget(operator_view)
+            self.stacked_widget.setCurrentWidget(operator_view)
 
-        self.login_page.hide()
-
-
-# Initialize application
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    main_window = MainWindow()
-    main_window.show()
+    main_app = MainApplication()
+    main_app.show()
     sys.exit(app.exec_())

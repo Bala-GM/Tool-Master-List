@@ -1,32 +1,9 @@
 {
-  "process_file_path": "C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx",
-  "op_file_path": "C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx",
-  "workbook_password": "123",
-  "sheet_passwords": {
-    "sheet1": "1",
-    "sheet2": "1",
-    "sheet3": "1",
-    "sheet4": "1",
-    "sheet5": "1",
-    "sheet6": "1",
-    "sheet7": "1",
-    "sheet8": "1",
-    "sheet9": "1",
-    "sheet10": "1",
-    "sheet11": "1",
-    "sheet12": "1",
-    "sheet13": "1",
-    "sheet14": "1",
-    "sheet15": "1",
-    "sheet16": "1",
-    "sheet17": "1",
-    "sheet18": "1",
-    "sheet19": "1",
-    "sheet20": "1",
-    "sheet21": "1",
-    "sheet22": "1",
-    "sheet23": "1",
-    "sheet24": "1"
-  }
+    "process_file_path": "C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx",
+    "op_file_path": "C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx",
+    "workbook_password": "123",
+    "sheet_passwords": {
+        "default_password": "1",
+        "sheet_count": 24
+    }
 }
-
