@@ -1,27 +1,32 @@
 import sys
-import pandas as pd
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem, QTabWidget, QAbstractItemView
-from openpyxl import load_workbook
 from PyQt5.QtCore import Qt
+from openpyxl import load_workbook
 
-class ExcelViewerWithTabs(QWidget):
+class ExcelViewerWithHomePage(QWidget):
     def __init__(self, file_path):
         super().__init__()
-        self.setWindowTitle("Excel Viewer with Tabs and Search - Read Only")
+        self.setWindowTitle("Excel Viewer with Home and Search Navigation")
         self.setGeometry(100, 100, 800, 600)
 
-        # Load the Excel file with openpyxl
+        # Load the Excel file
         self.workbook = load_workbook(file_path, data_only=True)
 
-        # Set up the search bar
+        # Set up search bar
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Search...")
         self.search_bar.textChanged.connect(self.search)
 
-        # Set up the tab widget to hold each sheet
+        # Set up the tab widget for all sheets
         self.tab_widget = QTabWidget()
 
-        # Initialize a dictionary to keep track of table widgets per sheet
+        # Create a "Home" tab for search results
+        self.home_table = QTableWidget()
+        self.home_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.home_table.cellClicked.connect(self.navigate_to_sheet)
+        self.tab_widget.addTab(self.home_table, "Home")
+
+        # Initialize dictionary to track table widgets by sheet
         self.tables = {}
         self.load_sheets()
 
@@ -32,25 +37,24 @@ class ExcelViewerWithTabs(QWidget):
         self.setLayout(layout)
 
     def load_sheets(self):
-        # Iterate through each sheet in the workbook
         for sheet_name in self.workbook.sheetnames:
             sheet = self.workbook[sheet_name]
 
-            # Create a QTableWidget for the sheet
+            # Create a QTableWidget for each sheet
             table_widget = QTableWidget()
-            table_widget.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Read-only mode
+            table_widget.setEditTriggers(QAbstractItemView.NoEditTriggers)
             table_widget.setRowCount(sheet.max_row)
             table_widget.setColumnCount(sheet.max_column)
 
-            # Load data and formatting
+            # Load data into the table widget
             self.load_data(sheet, table_widget)
             self.tables[sheet_name] = table_widget
 
-            # Add table widget to a new tab
+            # Add table widget as a new tab
             self.tab_widget.addTab(table_widget, sheet_name)
 
     def load_data(self, sheet, table_widget):
-        # Populate table widget with sheet data
+        # Populate table with data from the Excel sheet
         for row in sheet.iter_rows():
             for cell in row:
                 if cell.value is None:
@@ -68,22 +72,43 @@ class ExcelViewerWithTabs(QWidget):
             table_widget.setSpan(start_row, start_col, end_row - start_row + 1, end_col - start_col + 1)
 
     def search(self, text):
-        # Perform case-insensitive search across all tabs
+        # Clear previous search results on the Home tab
+        self.home_table.clear()
+        self.home_table.setRowCount(0)
+        self.home_table.setColumnCount(3)
+        self.home_table.setHorizontalHeaderLabels(["Sheet", "Cell", "Content"])
+
+        # Search across all sheets and highlight matching cells
         for sheet_name, table_widget in self.tables.items():
             for row in range(table_widget.rowCount()):
                 for col in range(table_widget.columnCount()):
                     item = table_widget.item(row, col)
-                    if item:
-                        # Check if the item text contains the search term
-                        item.setBackground(Qt.white)  # Reset background
-                        if text.lower() in item.text().lower():
-                            item.setBackground(Qt.yellow)  # Highlight matching cells
+                    if item and text.lower() in item.text().lower():
+                        # Add matching cells to the home table as a search result
+                        result_row = self.home_table.rowCount()
+                        self.home_table.insertRow(result_row)
+                        self.home_table.setItem(result_row, 0, QTableWidgetItem(sheet_name))
+                        self.home_table.setItem(result_row, 1, QTableWidgetItem(f"{chr(65 + col)}{row + 1}"))
+                        self.home_table.setItem(result_row, 2, QTableWidgetItem(item.text()))
+                        item.setBackground(Qt.yellow)  # Highlight match in original sheet
+
+    def navigate_to_sheet(self, row, column):
+        # Retrieve sheet name and cell location from the clicked search result
+        sheet_name = self.home_table.item(row, 0).text()
+        cell_location = self.home_table.item(row, 1).text()
+        target_row = int(cell_location[1:]) - 1
+        target_col = ord(cell_location[0].upper()) - 65
+
+        # Switch to the sheet tab and select the cell
+        self.tab_widget.setCurrentWidget(self.tables[sheet_name])
+        self.tables[sheet_name].setCurrentCell(target_row, target_col)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    viewer = ExcelViewerWithTabs("C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx")  # Replace with your Excel file path
+    viewer = ExcelViewerWithHomePage("C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx")  # Replace with your Excel file path
     viewer.show()
     sys.exit(app.exec_())
+
 
 
     
