@@ -5,5 +5,7 @@
     "sheet_passwords": {
         "default_password": "1",
         "sheet_count": 24
-    }
+    },
+    "hidden_sheets": ["STENCIL RECEIVED LIST-2024", "STENCIL MOVEMENT", "STENCIL SCRAP DETAIL"],
+    "save_path": "C:\\Users\\Bala Ganesh\\Desktop\\ToolMaster.xlsx"
 }
