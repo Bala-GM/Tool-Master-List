@@ -11,6 +11,10 @@ from openpyxl.utils import get_column_letter
 from datetime import datetime
 import json
 
+print('\n')
+print("\033[32;4m*******TOOLMASTER Version--PY_V-1.0.1 interface_GUI/J|15|01|2025-89P13*******\033[0m")
+print('\n')
+
 # Dummy data to store credentials
 USERS = {
     "admin": {"password": "admin#123", "role": "admin"},
@@ -232,3 +236,4 @@ if __name__ == "__main__":
     sys.exit(app.exec_())
 
 #pyinstaller --onefile ToolMaster.py
+#pyinstaller -F -i "IOS.ico" --noconsole ToolMaster.py
